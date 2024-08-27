@@ -122,7 +122,6 @@ fn queue_custom(
                     entity,
                     pipeline,
                     draw_function: draw_custom,
-                    // NOTE: TB: See https://github.com/bevyengine/bevy/blob/5f061ea0086c170853e8a9eb8f1c2e6ece414ef3/examples/shader/shader_instancing.rs#L155
                     distance: rangefinder
                         .distance_translation(&mesh_transforms.transform.translation),
                     batch_range: 0..1,

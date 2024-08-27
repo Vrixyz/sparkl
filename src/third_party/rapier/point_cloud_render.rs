@@ -1,19 +1,14 @@
-use std::{any::TypeId, fs::read_to_string};
+use std::fs::read_to_string;
 
 use bevy::{
-    asset::UntypedAssetId,
     core_pipeline::core_3d::Opaque3d,
     ecs::system::{lifetimeless::*, SystemParamItem},
     math::prelude::*,
-    pbr::{
-        MeshPipeline, MeshPipelineKey, MeshTransforms, MeshUniform, SetMeshBindGroup,
-        SetMeshViewBindGroup,
-    },
+    pbr::{MeshPipeline, MeshPipelineKey, MeshTransforms, SetMeshBindGroup, SetMeshViewBindGroup},
     prelude::*,
-    reflect::TypeUuid,
     render::{
         extract_component::{ExtractComponent, ExtractComponentPlugin},
-        mesh::{GpuBufferInfo, GpuMesh, MeshVertexBufferLayout},
+        mesh::{GpuBufferInfo, MeshVertexBufferLayout},
         render_asset::RenderAssets,
         render_phase::{
             AddRenderCommand, DrawFunctions, PhaseItem, RenderCommand, RenderCommandResult,
@@ -24,7 +19,6 @@ use bevy::{
         view::{ExtractedView, Msaa},
         Render, RenderApp, RenderSet,
     },
-    utils::Uuid,
 };
 use bytemuck::{Pod, Zeroable};
 
@@ -109,7 +103,6 @@ fn queue_custom(
     let msaa_key = MeshPipelineKey::from_msaa_samples(msaa.samples());
 
     for (view, mut transparent_phase) in views.iter_mut() {
-        let view_matrix = view.transform.compute_matrix();
         let rangefinder = view.rangefinder3d();
         for (entity, mesh_transforms, mesh_handle) in material_meshes.iter() {
             if let Some(mesh) = meshes.get(mesh_handle) {

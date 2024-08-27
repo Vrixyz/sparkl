@@ -1,15 +1,19 @@
-use std::fs::read_to_string;
+use std::{any::TypeId, fs::read_to_string};
 
 use bevy::{
+    asset::UntypedAssetId,
     core_pipeline::core_3d::Opaque3d,
     ecs::system::{lifetimeless::*, SystemParamItem},
     math::prelude::*,
-    pbr::{MeshPipeline, MeshPipelineKey, MeshUniform, SetMeshBindGroup, SetMeshViewBindGroup},
+    pbr::{
+        MeshPipeline, MeshPipelineKey, MeshTransforms, MeshUniform, SetMeshBindGroup,
+        SetMeshViewBindGroup,
+    },
     prelude::*,
     reflect::TypeUuid,
     render::{
         extract_component::{ExtractComponent, ExtractComponentPlugin},
-        mesh::{GpuBufferInfo, MeshVertexBufferLayout},
+        mesh::{GpuBufferInfo, GpuMesh, MeshVertexBufferLayout},
         render_asset::RenderAssets,
         render_phase::{
             AddRenderCommand, DrawFunctions, PhaseItem, RenderCommand, RenderCommandResult,
@@ -20,11 +24,12 @@ use bevy::{
         view::{ExtractedView, Msaa},
         Render, RenderApp, RenderSet,
     },
+    utils::Uuid,
 };
 use bytemuck::{Pod, Zeroable};
 
-pub const PARTICLE_SHADER_HANDLE: HandleUntyped =
-    HandleUntyped::weak_from_u64(Shader::TYPE_UUID, 10091001291240510013);
+// From: https://discordapp.com/channels/691052431525675048/1170930650606489711/1170944743962849380
+const PARTICLE_SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(10091001291240510013);
 
 #[derive(Component, Clone)]
 pub struct ParticleInstanceMaterialData(pub Vec<ParticleInstanceData>);
@@ -43,7 +48,7 @@ pub struct ParticleMaterialPlugin;
 
 impl Plugin for ParticleMaterialPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(ExtractComponentPlugin::<ParticleInstanceMaterialData>::default());
+        app.add_plugins(ExtractComponentPlugin::<ParticleInstanceMaterialData>::default());
         app.sub_app_mut(RenderApp)
             .add_render_command::<Opaque3d, DrawCustom>()
             .init_resource::<SpecializedMeshPipelines<ParticleRenderPipeline>>()
@@ -58,14 +63,14 @@ impl Plugin for ParticleMaterialPlugin {
 
         let mut shaders = app.world.get_resource_mut::<Assets<Shader>>().unwrap();
 
-        const WGSL_PATH: &'static str = "src/third_party/rapier/shaders/instancing3d.wgsl";
-        shaders.set_untracked(
-            PARTICLE_SHADER_HANDLE,
+        const WGSL_PATH: &'static str = "../src/third_party/rapier/shaders/instancing3d.wgsl";
+
+        shaders.get_or_insert_with(PARTICLE_SHADER_HANDLE, || {
             Shader::from_wgsl(
                 read_to_string(WGSL_PATH).expect("Couldn't read particle shader"),
                 WGSL_PATH,
-            ),
-        );
+            )
+        });
     }
 
     fn finish(&self, app: &mut App) {
@@ -90,7 +95,8 @@ fn queue_custom(
     mut pipeline_cache: ResMut<PipelineCache>,
     meshes: Res<RenderAssets<Mesh>>,
     material_meshes: Query<
-        (Entity, &MeshUniform, &Handle<Mesh>),
+        // From https://github.com/bevyengine/bevy/pull/9416/files#diff-4bf3ed03d4129aad9f5678ba19f9b14ee8e3e61d6f6365e82197b01c74468b10R387
+        (Entity, &MeshTransforms, &Handle<Mesh>),
         (With<Handle<Mesh>>, With<ParticleInstanceMaterialData>),
     >,
     mut views: Query<(&ExtractedView, &mut RenderPhase<Opaque3d>)>,
@@ -104,8 +110,8 @@ fn queue_custom(
 
     for (view, mut transparent_phase) in views.iter_mut() {
         let view_matrix = view.transform.compute_matrix();
-        let view_row_2 = view_matrix.row(2);
-        for (entity, mesh_uniform, mesh_handle) in material_meshes.iter() {
+        let rangefinder = view.rangefinder3d();
+        for (entity, mesh_transforms, mesh_handle) in material_meshes.iter() {
             if let Some(mesh) = meshes.get(mesh_handle) {
                 let key =
                     msaa_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology);
@@ -116,7 +122,11 @@ fn queue_custom(
                     entity,
                     pipeline,
                     draw_function: draw_custom,
-                    distance: view_row_2.dot(mesh_uniform.transform.col(3)),
+                    // NOTE: TB: See https://github.com/bevyengine/bevy/blob/5f061ea0086c170853e8a9eb8f1c2e6ece414ef3/examples/shader/shader_instancing.rs#L155
+                    distance: rangefinder
+                        .distance_translation(&mesh_transforms.transform.translation),
+                    batch_range: 0..1,
+                    dynamic_offset: None,
                 });
             }
         }
@@ -161,7 +171,7 @@ impl FromWorld for ParticleRenderPipeline {
         let mesh_pipeline = world.get_resource::<MeshPipeline>().unwrap();
 
         ParticleRenderPipeline {
-            shader: PARTICLE_SHADER_HANDLE.typed(),
+            shader: PARTICLE_SHADER_HANDLE,
             mesh_pipeline: mesh_pipeline.clone(),
         }
     }
@@ -258,5 +268,5 @@ impl<P: PhaseItem> RenderCommand<P> for DrawParticlesInstanced {
 }
 
 pub fn init_renderer(app: &mut App) {
-    app.add_plugin(ParticleMaterialPlugin);
+    app.add_plugins(ParticleMaterialPlugin);
 }

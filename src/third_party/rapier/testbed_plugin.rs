@@ -396,8 +396,7 @@ impl TestbedPlugin for MpmTestbedPlugin {
                     Transform::from_xyz(0.0, 0.0, 0.0),
                     GlobalTransform::default(),
                     ParticleInstanceMaterialData(vec![]),
-                    Visibility::default(),
-                    ComputedVisibility::default(),
+                    VisibilityBundle::default(),
                 ))
                 .id();
 

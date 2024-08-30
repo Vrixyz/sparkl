@@ -362,7 +362,7 @@ impl TestbedPlugin for MpmTestbedPlugin {
         _meshes: &mut Assets<Mesh>,
         #[cfg(feature = "dim2")] _materials: &mut Assets<ColorMaterial>,
         #[cfg(feature = "dim3")] _materials: &mut Assets<StandardMaterial>,
-        _components: &mut Query<(&mut Transform,)>,
+        _components: &mut Query<&mut Transform>,
         _harness: &mut Harness,
     ) {
         self.simulated_time = 0.0;
@@ -387,14 +387,7 @@ impl TestbedPlugin for MpmTestbedPlugin {
         {
             let entity = _commands
                 .spawn((
-                    _meshes.add(
-                        shape::Icosphere {
-                            radius: 1.0,
-                            subdivisions: 5,
-                        }
-                        .try_into()
-                        .unwrap(),
-                    ),
+                    _meshes.add(Sphere::new(1.0).mesh().ico(5).unwrap()),
                     SpatialBundle::INHERITED_IDENTITY,
                     ParticleInstanceMaterialData(vec![]),
                     // NOTE: Frustum culling is done based on the Aabb of the Mesh and the GlobalTransform.
@@ -616,7 +609,7 @@ impl TestbedPlugin for MpmTestbedPlugin {
         _meshes: &mut Assets<Mesh>,
         #[cfg(feature = "dim2")] _materials: &mut Assets<ColorMaterial>,
         #[cfg(feature = "dim3")] _materials: &mut Assets<StandardMaterial>,
-        _positions: &mut Query<(&mut Transform,)>,
+        _positions: &mut Query<&mut bevy::prelude::Transform>,
         _harness: &mut Harness,
     ) {
         self.step_id += 1;
@@ -712,6 +705,7 @@ impl TestbedPlugin for MpmTestbedPlugin {
                     #[cfg(feature = "dim3")]
                     scale: (particle.volume0 * 3.0 / (4.0 * std::f32::consts::PI)).cbrt() / 2.0,
                     color: [color[0], color[1], color[2], 1.0],
+                    instance_index: 0,
                 });
             }
 
@@ -786,7 +780,7 @@ impl TestbedPlugin for MpmTestbedPlugin {
         _meshes: &mut Assets<Mesh>,
         #[cfg(feature = "dim2")] _materials: &mut Assets<ColorMaterial>,
         #[cfg(feature = "dim3")] _materials: &mut Assets<StandardMaterial>,
-        _components: &mut Query<(&mut Transform,)>,
+        _components: &mut Query<&mut Transform>,
     ) {
         #[cfg(feature = "cuda")]
         {

@@ -10,9 +10,9 @@ cuda = ["sparkl2d/cuda"]
 
 [dependencies]
 Inflector = "0.11"
-nalgebra = "0.32"
-rapier_testbed2d = { version = "0.18.0" }
-rapier2d = { version = "0.18" }
+nalgebra = "0.33"
+rapier_testbed2d = { version = "0.22.0" }
+rapier2d = { version = "0.22" }
 oorandom = "11"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }

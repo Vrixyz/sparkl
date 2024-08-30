@@ -32,10 +32,10 @@ const PARTICLE_SHADER_HANDLE: Handle<Shader> = Handle::weak_from_u128(1009100129
 #[derive(Component, Clone)]
 pub struct ParticleInstanceMaterialData(pub Vec<ParticleInstanceData>);
 impl ExtractComponent for ParticleInstanceMaterialData {
-    type Query = &'static ParticleInstanceMaterialData;
-    type Filter = ();
+    type QueryData = &'static ParticleInstanceMaterialData;
+    type QueryFilter = ();
 
-    fn extract_component(item: bevy::ecs::query::QueryItem<Self::Query>) -> Option<Self> {
+    fn extract_component(item: bevy::ecs::query::QueryItem<Self::QueryData>) -> Option<Self> {
         Some(ParticleInstanceMaterialData(item.0.clone()))
     }
 
@@ -83,6 +83,7 @@ pub struct ParticleInstanceData {
     pub position: Vec3,
     pub scale: f32,
     pub color: [f32; 4],
+    pub instance_index: u32,
 }
 
 fn queue_custom(
@@ -90,7 +91,7 @@ fn queue_custom(
     custom_pipeline: Res<ParticleRenderPipeline>,
     msaa: Res<Msaa>,
     mut pipelines: ResMut<SpecializedMeshPipelines<ParticleRenderPipeline>>,
-    mut pipeline_cache: ResMut<PipelineCache>,
+    pipeline_cache: Res<PipelineCache>,
     meshes: Res<RenderAssets<Mesh>>,
     render_mesh_instances: Res<RenderMeshInstances>,
     material_meshes: Query<Entity, With<ParticleInstanceMaterialData>>,
@@ -102,7 +103,7 @@ fn queue_custom(
 
     for (view, mut transparent_phase) in views.iter_mut() {
         let view_key = msaa_key | MeshPipelineKey::from_hdr(view.hdr);
-        let rangefinder = view.rangefinder3d();
+        //let rangefinder = view.rangefinder3d();
         for entity in &material_meshes {
             let Some(mesh_instance) = render_mesh_instances.get(&entity) else {
                 continue;
@@ -112,14 +113,14 @@ fn queue_custom(
             };
             let key = view_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology);
             let pipeline = pipelines
-                .specialize(&mut pipeline_cache, &custom_pipeline, key, &mesh.layout)
+                .specialize(&pipeline_cache, &custom_pipeline, key, &mesh.layout)
                 .unwrap();
             transparent_phase.add(Opaque3d {
+                asset_id: mesh_instance.mesh_asset_id,
                 entity,
                 pipeline,
                 draw_function: draw_custom,
-                distance: rangefinder
-                    .distance_translation(&mesh_instance.transforms.transform.translation),
+                //distance: rangefinder.distance_translation(&mesh_instance.transforms.transform.translation),
                 batch_range: 0..1,
                 dynamic_offset: None,
             });
@@ -203,6 +204,12 @@ impl SpecializedMeshPipeline for ParticleRenderPipeline {
                     offset: VertexFormat::Float32x4.size(),
                     shader_location: 4,
                 },
+                // instance_index
+                VertexAttribute {
+                    format: VertexFormat::Uint32,
+                    offset: VertexFormat::Float32x4.size() + VertexFormat::Float32x4.size(),
+                    shader_location: 5,
+                },
             ],
         });
         descriptor.fragment.as_mut().unwrap().shader = self.shader.clone();
@@ -223,22 +230,24 @@ pub struct DrawParticlesInstanced;
 
 impl<P: PhaseItem> RenderCommand<P> for DrawParticlesInstanced {
     type Param = (SRes<RenderAssets<Mesh>>, SRes<RenderMeshInstances>);
-    type ViewWorldQuery = ();
-    type ItemWorldQuery = (Entity, Read<ParticleInstanceBuffer>);
+    type ViewQuery = ();
+    type ItemQuery = (Option<Entity>, Read<ParticleInstanceBuffer>);
 
     #[inline]
     fn render<'w>(
         item: &P,
         _view: (),
-        (entity, instance_buffer): ROQueryItem<'w, Self::ItemWorldQuery>,
+        item_query: ROQueryItem<'w, Option<(Option<Entity>, &'w ParticleInstanceBuffer)>>,
         (meshes, render_mesh_instances): SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
+        let Some((Some(entity), instance_buffer)) = item_query else {
+            return RenderCommandResult::Failure;
+        };
         let Some(mesh_instance) = render_mesh_instances.get(&entity) else {
             return RenderCommandResult::Failure;
         };
-
-        let gpu_mesh = match meshes.into_inner().get(mesh_instance.mesh_asset_id) {
+        let gpu_mesh = match meshes.into_inner().get(dbg!(mesh_instance.mesh_asset_id)) {
             Some(gpu_mesh) => gpu_mesh,
             None => {
                 return RenderCommandResult::Failure;

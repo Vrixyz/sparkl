@@ -1,7 +1,7 @@
 use std::fs::read_to_string;
 
 use bevy::{
-    core_pipeline::core_3d::Opaque3d,
+    core_pipeline::core_3d::{Opaque3d, Opaque3dBinKey},
     ecs::system::{lifetimeless::*, SystemParamItem},
     math::prelude::*,
     pbr::{
@@ -11,15 +11,16 @@ use bevy::{
     prelude::*,
     render::{
         extract_component::{ExtractComponent, ExtractComponentPlugin},
-        mesh::{GpuBufferInfo, MeshVertexBufferLayout},
+        mesh::{GpuBufferInfo, GpuMesh, MeshVertexBufferLayout, MeshVertexBufferLayoutRef},
         render_asset::RenderAssets,
         render_phase::{
-            AddRenderCommand, DrawFunctions, PhaseItem, RenderCommand, RenderCommandResult,
-            RenderPhase, SetItemPipeline, TrackedRenderPass,
+            AddRenderCommand, BinnedRenderPhase, BinnedRenderPhaseType, DrawFunctions, PhaseItem,
+            RenderCommand, RenderCommandResult, SetItemPipeline, TrackedRenderPass,
+            ViewBinnedRenderPhases, ViewSortedRenderPhases,
         },
         render_resource::*,
         renderer::RenderDevice,
-        view::{ExtractedView, Msaa},
+        view::{ExtractedView, Msaa, VisibleEntities},
         Render, RenderApp, RenderSet,
     },
 };
@@ -59,11 +60,14 @@ impl Plugin for ParticleMaterialPlugin {
                 ),
             );
 
-        let mut shaders = app.world.get_resource_mut::<Assets<Shader>>().unwrap();
+        let mut shaders = app
+            .world_mut()
+            .get_resource_mut::<Assets<Shader>>()
+            .unwrap();
 
         const WGSL_PATH: &'static str = "../src/third_party/rapier/shaders/instancing3d.wgsl";
 
-        shaders.get_or_insert_with(PARTICLE_SHADER_HANDLE, || {
+        shaders.get_or_insert_with(&PARTICLE_SHADER_HANDLE, || {
             Shader::from_wgsl(
                 read_to_string(WGSL_PATH).expect("Couldn't read particle shader"),
                 WGSL_PATH,
@@ -87,34 +91,53 @@ pub struct ParticleInstanceData {
 }
 
 fn queue_custom(
-    transparent_3d_draw_functions: Res<DrawFunctions<Opaque3d>>,
+    opaque_3d_draw_functions: Res<DrawFunctions<Opaque3d>>,
     custom_pipeline: Res<ParticleRenderPipeline>,
     msaa: Res<Msaa>,
     mut pipelines: ResMut<SpecializedMeshPipelines<ParticleRenderPipeline>>,
     pipeline_cache: Res<PipelineCache>,
-    meshes: Res<RenderAssets<Mesh>>,
+    meshes: Res<RenderAssets<GpuMesh>>,
     render_mesh_instances: Res<RenderMeshInstances>,
     material_meshes: Query<Entity, With<ParticleInstanceMaterialData>>,
-    mut views: Query<(&ExtractedView, &mut RenderPhase<Opaque3d>)>,
+    mut opaque_render_phases: ResMut<ViewBinnedRenderPhases<Opaque3d>>,
+    views: Query<(Entity, &ExtractedView)>,
 ) {
-    let draw_custom = transparent_3d_draw_functions.read().id::<DrawCustom>();
+    let draw_custom = opaque_3d_draw_functions.read().id::<DrawCustom>();
 
     let msaa_key = MeshPipelineKey::from_msaa_samples(msaa.samples());
 
-    for (view, mut transparent_phase) in views.iter_mut() {
+    for (view_entity, view) in views.iter() {
+        let Some(opaque_phase) = opaque_render_phases.get_mut(&view_entity) else {
+            continue;
+        };
+
         let view_key = msaa_key | MeshPipelineKey::from_hdr(view.hdr);
         //let rangefinder = view.rangefinder3d();
         for entity in &material_meshes {
-            let Some(mesh_instance) = render_mesh_instances.get(&entity) else {
+            let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(entity) else {
                 continue;
             };
             let Some(mesh) = meshes.get(mesh_instance.mesh_asset_id) else {
                 continue;
             };
-            let key = view_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology);
+            let key =
+                view_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology());
             let pipeline = pipelines
                 .specialize(&pipeline_cache, &custom_pipeline, key, &mesh.layout)
                 .unwrap();
+            let bin_key = Opaque3dBinKey {
+                draw_function: draw_custom,
+                pipeline,
+                asset_id: mesh_instance.mesh_asset_id.untyped(),
+                material_bind_group_id: None,
+                lightmap_image: None,
+            };
+            opaque_phase.add(
+                bin_key,
+                entity,
+                BinnedRenderPhaseType::mesh(mesh_instance.should_batch()),
+            );
+            /*
             transparent_phase.add(Opaque3d {
                 asset_id: mesh_instance.mesh_asset_id,
                 entity,
@@ -122,8 +145,10 @@ fn queue_custom(
                 draw_function: draw_custom,
                 //distance: rangefinder.distance_translation(&mesh_instance.transforms.transform.translation),
                 batch_range: 0..1,
-                dynamic_offset: None,
-            });
+                key: todo!(),
+                representative_entity: todo!(),
+                extra_index: todo!(),
+            });*/
         }
     }
 }
@@ -175,7 +200,7 @@ impl SpecializedMeshPipeline for ParticleRenderPipeline {
     fn specialize(
         &self,
         key: Self::Key,
-        layout: &MeshVertexBufferLayout,
+        layout: &MeshVertexBufferLayoutRef,
     ) -> Result<RenderPipelineDescriptor, SpecializedMeshPipelineError> {
         let mut descriptor = self.mesh_pipeline.specialize(key, layout)?;
 
@@ -229,7 +254,7 @@ type DrawCustom = (
 pub struct DrawParticlesInstanced;
 
 impl<P: PhaseItem> RenderCommand<P> for DrawParticlesInstanced {
-    type Param = (SRes<RenderAssets<Mesh>>, SRes<RenderMeshInstances>);
+    type Param = (SRes<RenderAssets<GpuMesh>>, SRes<RenderMeshInstances>);
     type ViewQuery = ();
     type ItemQuery = (Option<Entity>, Read<ParticleInstanceBuffer>);
 
@@ -244,7 +269,7 @@ impl<P: PhaseItem> RenderCommand<P> for DrawParticlesInstanced {
         let Some((Some(entity), instance_buffer)) = item_query else {
             return RenderCommandResult::Failure;
         };
-        let Some(mesh_instance) = render_mesh_instances.get(&entity) else {
+        let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(entity) else {
             return RenderCommandResult::Failure;
         };
         let gpu_mesh = match meshes.into_inner().get(dbg!(mesh_instance.mesh_asset_id)) {

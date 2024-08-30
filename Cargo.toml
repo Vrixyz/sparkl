@@ -16,6 +16,11 @@ resolver = "2"
 #rapier3d = { git = "https://github.com/dimforge/rapier", branch = "testbed-init-app" }
 #rapier2d = { path = "../rapier/crates/rapier2d" }
 #rapier3d = { path = "../rapier/crates/rapier3d" }
+rapier2d = { git = "https://github.com/Vrixyz/rapier", branch = "update-testbed-bevy-0.14" }
+rapier3d = { git = "https://github.com/Vrixyz/rapier", branch = "update-testbed-bevy-0.14" }
+rapier_testbed2d = { git = "https://github.com/Vrixyz/rapier", branch = "update-testbed-bevy-0.14" }
+rapier_testbed3d = { git = "https://github.com/Vrixyz/rapier", branch = "update-testbed-bevy-0.14" }
+
 #rapier_testbed2d = { git = "https://github.com/dimforge/rapier", branch = "testbed-init-app" }
 #rapier_testbed3d = { git = "https://github.com/dimforge/rapier", branch = "testbed-init-app" }
 #rapier_testbed2d = { path = "../rapier/crates/rapier_testbed2d" }

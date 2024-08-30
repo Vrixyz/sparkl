@@ -1,4 +1,4 @@
-#import bevy_pbr::mesh_functions::{get_model_matrix, mesh_position_local_to_clip, mesh_position_local_to_world}
+#import bevy_pbr::mesh_functions::{get_world_from_local, mesh_position_local_to_clip, mesh_position_local_to_world}
 #import bevy_render::maths::affine_to_square;
 #import bevy_pbr::mesh_view_bindings::view
 #import bevy_pbr::mesh_types::Mesh
@@ -27,10 +27,10 @@ struct VertexOutput {
 fn vertex(vertex: Vertex) -> VertexOutput {
     let position = vertex.position * vertex.i_pos_scale.w + vertex.i_pos_scale.xyz;
     //Working:
-    //let world_position = get_model_matrix(2u) * vec4<f32>(position, 1.0);
-    let world_position = mesh_position_local_to_world(get_model_matrix(vertex.instance_index), vec4<f32>(position, 1.0));
+    //let world_position = get_world_from_local(2u) * vec4<f32>(position, 1.0);
+    let world_position = mesh_position_local_to_world(get_world_from_local(vertex.instance_index), vec4<f32>(position, 1.0));
 
-    //let world_position = mesh_position_local_to_world(get_model_matrix(vertex.instance_index), vec4<f32>(position, 1.0));
+    //let world_position = mesh_position_local_to_world(get_world_from_local(vertex.instance_index), vec4<f32>(position, 1.0));
     //let world_position = affine_to_square(mesh.model) * vec4<f32>(position, 1.0);
 
     var out: VertexOutput;
@@ -39,7 +39,7 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     //     get_world_from_local(2u),
     //     vec4<f32>(vertex.position, 1.0),
     // );
-    out.clip_position = view.view_proj * world_position;
+    out.clip_position = view.clip_from_world * world_position;
 
     
     // NOTE: Passing 0 as the instance_index to get_model_matrix() is a hack

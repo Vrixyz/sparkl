@@ -71,8 +71,8 @@ bytemuck = "1"
 # Third-party integration
 rapier_testbed3d = { version = "0.22", optional = true }
 
-bevy_egui = { version = "0.26", optional = true, features = ["immutable_ctx"] }
-bevy_ecs = { version = "0.13", optional = true }
+bevy_egui = { version = "0.29", optional = true, features = ["immutable_ctx"] }
+bevy_ecs = { version = "0.14", optional = true }
 itertools = { version = "0.10", optional = true }
 
 # CUDA
@@ -80,7 +80,7 @@ cust = { version = "0.3", optional = true }
 sparkl3d-kernels = { version = "0.4", optional = true, path = "../sparkl3d-kernels" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-bevy = { version = "0.13", default-features = false, features = [
+bevy = { version = "0.14", default-features = false, features = [
     "bevy_winit",
     "bevy_render",
     "x11",

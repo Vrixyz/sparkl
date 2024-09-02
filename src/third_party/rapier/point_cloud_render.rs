@@ -265,7 +265,7 @@ impl<P: PhaseItem> RenderCommand<P> for DrawParticlesInstanced {
         let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(entity) else {
             return RenderCommandResult::Failure;
         };
-        let gpu_mesh = match meshes.into_inner().get(dbg!(mesh_instance.mesh_asset_id)) {
+        let gpu_mesh = match meshes.into_inner().get(mesh_instance.mesh_asset_id) {
             Some(gpu_mesh) => gpu_mesh,
             None => {
                 return RenderCommandResult::Failure;

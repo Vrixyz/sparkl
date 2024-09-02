@@ -705,7 +705,6 @@ impl TestbedPlugin for MpmTestbedPlugin {
                     #[cfg(feature = "dim3")]
                     scale: (particle.volume0 * 3.0 / (4.0 * std::f32::consts::PI)).cbrt() / 2.0,
                     color: [color[0], color[1], color[2], 1.0],
-                    instance_index: 0,
                 });
             }
 

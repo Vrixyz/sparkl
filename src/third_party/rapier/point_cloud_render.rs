@@ -83,7 +83,6 @@ pub struct ParticleInstanceData {
     pub position: Vec3,
     pub scale: f32,
     pub color: [f32; 4],
-    pub instance_index: u32,
 }
 
 fn queue_custom(
@@ -203,12 +202,6 @@ impl SpecializedMeshPipeline for ParticleRenderPipeline {
                     format: VertexFormat::Float32x4,
                     offset: VertexFormat::Float32x4.size(),
                     shader_location: 4,
-                },
-                // instance_index
-                VertexAttribute {
-                    format: VertexFormat::Uint32,
-                    offset: VertexFormat::Float32x4.size() + VertexFormat::Float32x4.size(),
-                    shader_location: 5,
                 },
             ],
         });
